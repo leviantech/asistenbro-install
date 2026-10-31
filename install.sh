@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Asistenbro Standalone Installer
 # One-liner: curl -fsSL https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.sh | bash
-# Atau untuk versi spesifik: curl -fsSL https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.sh | bash -s -- v0.21.0-rc.4
+# Atau versi spesifik: curl -fsSL https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.sh | bash -s -- v0.21.0-rc.5
 
 set -euo pipefail
 
-RELEASE_TAG="${1:-${ASISTENBRO_VERSION:-v0.21.0-rc.4}}"
+RELEASE_TAG="${1:-${ASISTENBRO_VERSION:-v0.21.0-rc.5}}"
 BASE_URL="https://github.com/leviantech/asistenbro-install/releases/download/${RELEASE_TAG}"
 DEFAULT_SERVER_URL="https://agent.asistenbro.my.id"
 SERVER_URL="${ASISTENBRO_SERVER:-$DEFAULT_SERVER_URL}"
@@ -58,25 +58,31 @@ fi
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
-# Determine wheel name based on tag
+# Determine wheel names based on tag
 if [ "$RELEASE_TAG" = "v0.20.1" ]; then
     WHEEL_NAME="omnigent-0.20.0.dev0-py3-none-any.whl"
+    CLIENT_WHEEL_NAME="omnigent_client-0.20.0.dev0-py3-none-any.whl"
+    UI_WHEEL_NAME="omnigent_ui_sdk-0.20.0.dev0-py3-none-any.whl"
 else
     CLEAN_VER="${RELEASE_TAG#v}"
     PY_VER="${CLEAN_VER/-rc./rc}"
     WHEEL_NAME="omnigent-${PY_VER}-py3-none-any.whl"
+    CLIENT_WHEEL_NAME="omnigent_client-${PY_VER}-py3-none-any.whl"
+    UI_WHEEL_NAME="omnigent_ui_sdk-${PY_VER}-py3-none-any.whl"
 fi
 
 # Step 2: Install CLI & Server packages
 log "Mengunduh paket Asistenbro (${RELEASE_TAG})..."
 curl -fsSL -o "${TMP_DIR}/${WHEEL_NAME}" "${BASE_URL}/${WHEEL_NAME}"
+curl -fsSL -o "${TMP_DIR}/${CLIENT_WHEEL_NAME}" "${BASE_URL}/${CLIENT_WHEEL_NAME}" 2>/dev/null || true
+curl -fsSL -o "${TMP_DIR}/${UI_WHEEL_NAME}" "${BASE_URL}/${UI_WHEEL_NAME}" 2>/dev/null || true
 
 log "Menyiapkan environment di ${VENV_DIR}..."
 mkdir -p "${VENV_DIR}"
 uv venv --allow-existing "${VENV_DIR}"
 
 log "Menginstall paket Asistenbro..."
-uv pip install --python "${VENV_DIR}/bin/python" "${TMP_DIR}/${WHEEL_NAME}"
+uv pip install --python "${VENV_DIR}/bin/python" --find-links "${TMP_DIR}" "${TMP_DIR}/${WHEEL_NAME}"
 
 mkdir -p "${BIN_DIR}"
 ln -sf "${VENV_DIR}/bin/asistenbro" "${BIN_DIR}/asistenbro"
