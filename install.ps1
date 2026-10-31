@@ -3,7 +3,26 @@
 
 $ErrorActionPreference = 'Stop'
 
-$ReleaseTag = "v0.20.1"
+if (-not $env:ASISTENBRO_VERSION) {
+    try {
+        $Latest = Invoke-RestMethod -Uri "https://api.github.com/repos/leviantech/asistenbro-install/releases/latest"
+        $ReleaseTag = $Latest.tag_name
+    } catch {
+        $ReleaseTag = "v0.21.0"
+    }
+} else {
+    $ReleaseTag = $env:ASISTENBRO_VERSION
+}
+
+$CleanVer = $ReleaseTag.TrimStart("v")
+$PyVer = $CleanVer.Replace("-rc.", "rc")
+if ($ReleaseTag -eq "v0.20.1") {
+    $PyVer = "0.20.0.dev0"
+}
+$WheelName = "omnigent-$PyVer-py3-none-any.whl"
+$ClientWheelName = "omnigent_client-$PyVer-py3-none-any.whl"
+$UiWheelName = "omnigent_ui_sdk-$PyVer-py3-none-any.whl"
+
 $BaseUrl = "https://github.com/leviantech/asistenbro-install/releases/download/$ReleaseTag"
 $DefaultServer = "https://agent.asistenbro.my.id"
 
@@ -26,9 +45,9 @@ $TempDir = New-Item -ItemType Directory -Path "$env:TEMP\asistenbro-install-$([g
 
 try {
     Write-Host "==> Mengunduh paket Asistenbro ($ReleaseTag)..." -ForegroundColor Green
-    Invoke-WebRequest -Uri "$BaseUrl/omnigent-0.20.0.dev0-py3-none-any.whl" -OutFile "$TempDir\omnigent-0.20.0.dev0-py3-none-any.whl"
-    Invoke-WebRequest -Uri "$BaseUrl/omnigent_client-0.20.0.dev0-py3-none-any.whl" -OutFile "$TempDir\omnigent_client-0.20.0.dev0-py3-none-any.whl"
-    Invoke-WebRequest -Uri "$BaseUrl/omnigent_ui_sdk-0.20.0.dev0-py3-none-any.whl" -OutFile "$TempDir\omnigent_ui_sdk-0.20.0.dev0-py3-none-any.whl"
+    Invoke-WebRequest -Uri "$BaseUrl/$WheelName" -OutFile "$TempDir\$WheelName"
+    try { Invoke-WebRequest -Uri "$BaseUrl/$ClientWheelName" -OutFile "$TempDir\$ClientWheelName" } catch {}
+    try { Invoke-WebRequest -Uri "$BaseUrl/$UiWheelName" -OutFile "$TempDir\$UiWheelName" } catch {}
 
     Write-Host "==> Menyiapkan environment di $InstallDir..." -ForegroundColor Green
     if (-not (Test-Path $InstallDir)) {
@@ -37,7 +56,7 @@ try {
     uv venv --allow-existing $InstallDir
 
     Write-Host "==> Menginstall paket Asistenbro..." -ForegroundColor Green
-    uv pip install --python "$InstallDir\Scripts\python.exe" --find-links $TempDir "$TempDir\omnigent-0.20.0.dev0-py3-none-any.whl"
+    uv pip install --python "$InstallDir\Scripts\python.exe" --find-links $TempDir "$TempDir\$WheelName"
 
     if (-not (Test-Path $BinDir)) {
         New-Item -ItemType Directory -Path $BinDir -Force | Out-Null

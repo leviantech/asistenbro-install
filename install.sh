@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Asistenbro Standalone Installer
 # One-liner: curl -fsSL https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.sh | bash
-# Atau versi spesifik: curl -fsSL https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.sh | bash -s -- v0.21.0-rc.5
+# Atau versi spesifik: curl -fsSL https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.sh | bash -s -- v0.21.0
 
 set -euo pipefail
 
-RELEASE_TAG="${1:-${ASISTENBRO_VERSION:-v0.21.0-rc.5}}"
+RELEASE_TAG="${1:-${ASISTENBRO_VERSION:-}}"
+if [ -z "${RELEASE_TAG}" ]; then
+    LATEST_TAG=$(curl -fsSL https://api.github.com/repos/leviantech/asistenbro-install/releases/latest 2>/dev/null | grep '"tag_name":' | head -n 1 | cut -d '"' -f 4 || true)
+    RELEASE_TAG="${LATEST_TAG:-v0.21.0}"
+fi
 BASE_URL="https://github.com/leviantech/asistenbro-install/releases/download/${RELEASE_TAG}"
 DEFAULT_SERVER_URL="https://agent.asistenbro.my.id"
 SERVER_URL="${ASISTENBRO_SERVER:-$DEFAULT_SERVER_URL}"
