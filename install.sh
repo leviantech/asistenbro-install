@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Asistenbro Standalone Installer
 # One-liner: curl -fsSL https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.sh | bash
+# Atau untuk versi spesifik: curl -fsSL https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.sh | bash -s -- v0.21.0-rc.4
 
 set -euo pipefail
 
-RELEASE_TAG="v0.20.1"
+RELEASE_TAG="${1:-${ASISTENBRO_VERSION:-v0.21.0-rc.4}}"
 BASE_URL="https://github.com/leviantech/asistenbro-install/releases/download/${RELEASE_TAG}"
 DEFAULT_SERVER_URL="https://agent.asistenbro.my.id"
 SERVER_URL="${ASISTENBRO_SERVER:-$DEFAULT_SERVER_URL}"
@@ -57,18 +58,25 @@ fi
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
+# Determine wheel name based on tag
+if [ "$RELEASE_TAG" = "v0.20.1" ]; then
+    WHEEL_NAME="omnigent-0.20.0.dev0-py3-none-any.whl"
+else
+    CLEAN_VER="${RELEASE_TAG#v}"
+    PY_VER="${CLEAN_VER/-rc./rc}"
+    WHEEL_NAME="omnigent-${PY_VER}-py3-none-any.whl"
+fi
+
 # Step 2: Install CLI & Server packages
 log "Mengunduh paket Asistenbro (${RELEASE_TAG})..."
-curl -fsSL -o "${TMP_DIR}/omnigent-0.20.0.dev0-py3-none-any.whl" "${BASE_URL}/omnigent-0.20.0.dev0-py3-none-any.whl"
-curl -fsSL -o "${TMP_DIR}/omnigent_client-0.20.0.dev0-py3-none-any.whl" "${BASE_URL}/omnigent_client-0.20.0.dev0-py3-none-any.whl"
-curl -fsSL -o "${TMP_DIR}/omnigent_ui_sdk-0.20.0.dev0-py3-none-any.whl" "${BASE_URL}/omnigent_ui_sdk-0.20.0.dev0-py3-none-any.whl"
+curl -fsSL -o "${TMP_DIR}/${WHEEL_NAME}" "${BASE_URL}/${WHEEL_NAME}"
 
 log "Menyiapkan environment di ${VENV_DIR}..."
 mkdir -p "${VENV_DIR}"
 uv venv --allow-existing "${VENV_DIR}"
 
 log "Menginstall paket Asistenbro..."
-uv pip install --python "${VENV_DIR}/bin/python" --find-links "${TMP_DIR}" "${TMP_DIR}/omnigent-0.20.0.dev0-py3-none-any.whl"
+uv pip install --python "${VENV_DIR}/bin/python" "${TMP_DIR}/${WHEEL_NAME}"
 
 mkdir -p "${BIN_DIR}"
 ln -sf "${VENV_DIR}/bin/asistenbro" "${BIN_DIR}/asistenbro"
@@ -114,7 +122,7 @@ fi
 
 echo ""
 printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
-printf "${BOLD}Cara Menggunakan Asistenbro:${RESET}\n"
+printf "${BOLD}Cara Menggunakan Asistenbro (${RELEASE_TAG}):${RESET}\n"
 echo ""
 if [ "$(uname -s)" = "Darwin" ]; then
     echo "• Buka Desktop App: cari 'Asistenbro' di Spotlight (Cmd + Spasi) atau Launchpad."
