@@ -54,16 +54,15 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
-# Step 2: Download packages to temporary directory
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
+# Step 2: Install CLI & Server packages
 log "Mengunduh paket Asistenbro (${RELEASE_TAG})..."
 curl -fsSL -o "${TMP_DIR}/omnigent-0.20.0.dev0-py3-none-any.whl" "${BASE_URL}/omnigent-0.20.0.dev0-py3-none-any.whl"
 curl -fsSL -o "${TMP_DIR}/omnigent_client-0.20.0.dev0-py3-none-any.whl" "${BASE_URL}/omnigent_client-0.20.0.dev0-py3-none-any.whl"
 curl -fsSL -o "${TMP_DIR}/omnigent_ui_sdk-0.20.0.dev0-py3-none-any.whl" "${BASE_URL}/omnigent_ui_sdk-0.20.0.dev0-py3-none-any.whl"
 
-# Step 3: Create dedicated virtualenv and install
 log "Menyiapkan environment di ${VENV_DIR}..."
 mkdir -p "${VENV_DIR}"
 uv venv --allow-existing "${VENV_DIR}"
@@ -71,7 +70,6 @@ uv venv --allow-existing "${VENV_DIR}"
 log "Menginstall paket Asistenbro..."
 uv pip install --python "${VENV_DIR}/bin/python" --find-links "${TMP_DIR}" "${TMP_DIR}/omnigent-0.20.0.dev0-py3-none-any.whl"
 
-# Step 4: Symlink binaries to ~/.local/bin
 mkdir -p "${BIN_DIR}"
 ln -sf "${VENV_DIR}/bin/asistenbro" "${BIN_DIR}/asistenbro"
 ln -sf "${VENV_DIR}/bin/bro" "${BIN_DIR}/bro"
@@ -86,17 +84,45 @@ case ":${PATH}:" in
         ;;
 esac
 
-log "Asistenbro berhasil terinstall!"
+log "CLI Asistenbro berhasil terinstall!"
 "${BIN_DIR}/asistenbro" --version || true
+
+# Step 3: Install macOS Desktop App if running on macOS
+if [ "$(uname -s)" = "Darwin" ]; then
+    case "$(uname -m)" in
+        arm64) MAC_ARCH="arm64" ;;
+        *)     MAC_ARCH="x64" ;;
+    esac
+
+    ZIP_NAME="Asistenbro-0.18.1-${MAC_ARCH}-mac.zip"
+    log "Mengunduh Asistenbro Desktop App untuk macOS (${MAC_ARCH})..."
+    curl -fsSL -o "${TMP_DIR}/desktop.zip" "${BASE_URL}/${ZIP_NAME}"
+
+    APP_DIR="/Applications"
+    if [ ! -w "${APP_DIR}" ]; then
+        APP_DIR="${HOME}/Applications"
+        mkdir -p "${APP_DIR}"
+    fi
+
+    log "Memasang ke ${APP_DIR}/Asistenbro.app..."
+    rm -rf "${APP_DIR}/Asistenbro.app"
+    ditto -xk "${TMP_DIR}/desktop.zip" "${APP_DIR}"
+    xattr -cr "${APP_DIR}/Asistenbro.app" 2>/dev/null || true
+
+    log "Desktop App berhasil dipasang di ${APP_DIR}/Asistenbro.app! ✨"
+fi
 
 echo ""
 printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
-printf "${BOLD}Cara Menghubungkan Mesin Ini ke Server Asistenbro:${RESET}\n"
+printf "${BOLD}Cara Menggunakan Asistenbro:${RESET}\n"
 echo ""
-echo "1. Untuk menjalankan host interaktif:"
+if [ "$(uname -s)" = "Darwin" ]; then
+    echo "• Buka Desktop App: cari 'Asistenbro' di Spotlight (Cmd + Spasi) atau Launchpad."
+fi
+echo "• Untuk menjalankan host interaktif:"
 printf "   ${GREEN}asistenbro host %s${RESET}\n" "${SERVER_URL}"
 echo ""
-echo "2. Atau jalankan di background sebagai service otomatis (systemd):"
+echo "• Atau jalankan di background sebagai service otomatis (systemd):"
 printf "   ${GREEN}asistenbro host enable --server %s${RESET}\n" "${SERVER_URL}"
 printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 echo ""
