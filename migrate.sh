@@ -81,12 +81,15 @@ log "Membuat backup otomatis di: ${BACKUP_DIR}..."
 
 # 2b. Backup PostgreSQL Database if running
 log "Mengecek service database PostgreSQL..."
-POSTGRES_CONTAINER=$($DOCKER_COMPOSE ps -q postgres 2>/dev/null || true)
-if [ -z "${POSTGRES_CONTAINER}" ]; then
-    POSTGRES_CONTAINER=$(docker ps -q -f "name=postgres" | head -n 1 || true)
+POSTGRES_RUNNING=$($DOCKER_COMPOSE ps --status running -q postgres 2>/dev/null || docker ps -q -f "name=postgres" -f "status=running" | head -n 1 || true)
+if [ -z "${POSTGRES_RUNNING}" ]; then
+    # Coba hidupkan postgres jika sedang stopped
+    $DOCKER_COMPOSE up -d postgres >/dev/null 2>&1 || true
+    sleep 3
+    POSTGRES_RUNNING=$($DOCKER_COMPOSE ps --status running -q postgres 2>/dev/null || docker ps -q -f "name=postgres" -f "status=running" | head -n 1 || true)
 fi
 
-if [ -n "${POSTGRES_CONTAINER}" ]; then
+if [ -n "${POSTGRES_RUNNING}" ]; then
     log "Dumping database PostgreSQL..."
     # Read db credentials from environment or defaults
     POSTGRES_USER="${POSTGRES_USER:-omnigent}"
@@ -98,11 +101,15 @@ if [ -n "${POSTGRES_CONTAINER}" ]; then
     POSTGRES_USER="${POSTGRES_USER:-omnigent}"
     POSTGRES_DB="${POSTGRES_DB:-omnigent}"
 
-    docker exec -i "${POSTGRES_CONTAINER}" pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "${BACKUP_DIR}/database_${POSTGRES_DB}.sql" 2>/dev/null || \
-    $DOCKER_COMPOSE exec -T postgres pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "${BACKUP_DIR}/database_${POSTGRES_DB}.sql"
-    log "Database berhasil di-dump ke: ${BACKUP_DIR}/database_${POSTGRES_DB}.sql (${BOLD}$(du -h "${BACKUP_DIR}/database_${POSTGRES_DB}.sql" | cut -f1)${RESET})"
+    if docker exec -i "${POSTGRES_RUNNING}" pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "${BACKUP_DIR}/database_${POSTGRES_DB}.sql" 2>/dev/null || \
+       $DOCKER_COMPOSE exec -T postgres pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "${BACKUP_DIR}/database_${POSTGRES_DB}.sql" 2>/dev/null; then
+        log "Database berhasil di-dump ke: ${BACKUP_DIR}/database_${POSTGRES_DB}.sql (${BOLD}$(du -h "${BACKUP_DIR}/database_${POSTGRES_DB}.sql" | cut -f1)${RESET})"
+    else
+        warn "Gagal dump database SQL (volume Docker tetap aman)."
+        rm -f "${BACKUP_DIR}/database_${POSTGRES_DB}.sql"
+    fi
 else
-    warn "Container postgres tidak sedang berjalan. Backup database SQL dilewati (volume Docker tetap aman)."
+    warn "Service postgres tidak sedang berjalan. Backup database SQL dilewati (volume Docker postgres-data tetap aman)."
 fi
 
 # 2c. Backup Persistent Artifact Volume
