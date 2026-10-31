@@ -4,11 +4,13 @@
 
 set -euo pipefail
 
+RELEASE_TAG="v0.20.1"
+BASE_URL="https://github.com/leviantech/asistenbro-install/releases/download/${RELEASE_TAG}"
 DEFAULT_SERVER_URL="https://agent.asistenbro.my.id"
-DEFAULT_RELEASE_URL="https://github.com/leviantech/asistenbro-install/releases/latest/download/asistenbro-latest-py3-none-any.whl"
-
 SERVER_URL="${ASISTENBRO_SERVER:-$DEFAULT_SERVER_URL}"
-WHEEL_URL="${ASISTENBRO_WHEEL_URL:-$DEFAULT_RELEASE_URL}"
+
+VENV_DIR="${HOME}/.local/share/asistenbro/venv"
+BIN_DIR="${HOME}/.local/bin"
 
 # Styling
 BOLD="\033[1m"
@@ -40,7 +42,7 @@ EOF
 
 print_banner
 
-# Step 1: Ensure uv is installed (fastest & cleanest Python environment manager)
+# Step 1: Ensure uv is installed
 if ! command -v uv >/dev/null 2>&1; then
     log "Menginstall uv (Python package manager cepat & mandiri)..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -52,12 +54,28 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
-# Step 2: Install Asistenbro CLI using uv tool
-log "Menginstall Asistenbro CLI..."
-uv tool install --force "${WHEEL_URL}"
+# Step 2: Download packages to temporary directory
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "${TMP_DIR}"' EXIT
 
-# Ensure ~/.local/bin is on PATH
-BIN_DIR="${HOME}/.local/bin"
+log "Mengunduh paket Asistenbro (${RELEASE_TAG})..."
+curl -fsSL -o "${TMP_DIR}/omnigent-0.20.0.dev0-py3-none-any.whl" "${BASE_URL}/omnigent-0.20.0.dev0-py3-none-any.whl"
+curl -fsSL -o "${TMP_DIR}/omnigent_client-0.20.0.dev0-py3-none-any.whl" "${BASE_URL}/omnigent_client-0.20.0.dev0-py3-none-any.whl"
+curl -fsSL -o "${TMP_DIR}/omnigent_ui_sdk-0.20.0.dev0-py3-none-any.whl" "${BASE_URL}/omnigent_ui_sdk-0.20.0.dev0-py3-none-any.whl"
+
+# Step 3: Create dedicated virtualenv and install
+log "Menyiapkan environment di ${VENV_DIR}..."
+mkdir -p "${VENV_DIR}"
+uv venv --allow-existing "${VENV_DIR}"
+
+log "Menginstall paket Asistenbro..."
+uv pip install --python "${VENV_DIR}/bin/python" --find-links "${TMP_DIR}" "${TMP_DIR}/omnigent-0.20.0.dev0-py3-none-any.whl"
+
+# Step 4: Symlink binaries to ~/.local/bin
+mkdir -p "${BIN_DIR}"
+ln -sf "${VENV_DIR}/bin/asistenbro" "${BIN_DIR}/asistenbro"
+ln -sf "${VENV_DIR}/bin/bro" "${BIN_DIR}/bro"
+
 case ":${PATH}:" in
     *":${BIN_DIR}:"*) ;;
     *)
@@ -69,7 +87,7 @@ case ":${PATH}:" in
 esac
 
 log "Asistenbro berhasil terinstall!"
-asistenbro --version || true
+"${BIN_DIR}/asistenbro" --version || true
 
 echo ""
 printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
