@@ -56,8 +56,11 @@ else
     error "Docker Compose tidak ditemukan."
 fi
 
-if [ ! -f "docker-compose.yaml" ] && [ ! -f "docker-compose.yml" ]; then
-    error "File docker-compose.yaml tidak ditemukan di direktori saat ini ($(pwd)). Silakan masuk ke folder deploy/docker terlebih dahulu."
+COMPOSE_FILE="docker-compose.yaml"
+if [ ! -f "docker-compose.yaml" ] && [ -f "docker-compose.yml" ]; then
+    COMPOSE_FILE="docker-compose.yml"
+elif [ ! -f "docker-compose.yaml" ]; then
+    error "File docker-compose.yaml atau docker-compose.yml tidak ditemukan di direktori saat ini ($(pwd)). Silakan masuk ke folder deploy docker terlebih dahulu."
 fi
 
 TARGET_TAG="${1:-latest}"
@@ -74,11 +77,14 @@ log "Membuat backup otomatis di: ${BACKUP_DIR}..."
 
 # 2a. Backup config files
 [ -f ".env" ] && cp ".env" "${BACKUP_DIR}/.env.bak"
-[ -f "docker-compose.yaml" ] && cp "docker-compose.yaml" "${BACKUP_DIR}/docker-compose.yaml.bak"
+[ -f "${COMPOSE_FILE}" ] && cp "${COMPOSE_FILE}" "${BACKUP_DIR}/${COMPOSE_FILE}.bak"
 
 # 2b. Backup PostgreSQL Database if running
 log "Mengecek service database PostgreSQL..."
 POSTGRES_CONTAINER=$($DOCKER_COMPOSE ps -q postgres 2>/dev/null || true)
+if [ -z "${POSTGRES_CONTAINER}" ]; then
+    POSTGRES_CONTAINER=$(docker ps -q -f "name=postgres" | head -n 1 || true)
+fi
 
 if [ -n "${POSTGRES_CONTAINER}" ]; then
     log "Dumping database PostgreSQL..."
@@ -92,6 +98,7 @@ if [ -n "${POSTGRES_CONTAINER}" ]; then
     POSTGRES_USER="${POSTGRES_USER:-omnigent}"
     POSTGRES_DB="${POSTGRES_DB:-omnigent}"
 
+    docker exec -i "${POSTGRES_CONTAINER}" pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "${BACKUP_DIR}/database_${POSTGRES_DB}.sql" 2>/dev/null || \
     $DOCKER_COMPOSE exec -T postgres pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "${BACKUP_DIR}/database_${POSTGRES_DB}.sql"
     log "Database berhasil di-dump ke: ${BACKUP_DIR}/database_${POSTGRES_DB}.sql (${BOLD}$(du -h "${BACKUP_DIR}/database_${POSTGRES_DB}.sql" | cut -f1)${RESET})"
 else
@@ -114,7 +121,7 @@ fi
 log "Semua backup berhasil disimpan! 🛡️"
 
 # Step 3: Update configuration to use Asistenbro image
-log "Memperbarui konfigurasi image di .env..."
+log "Memperbarui konfigurasi image di .env dan ${COMPOSE_FILE}..."
 touch .env
 
 update_env_var() {
@@ -133,15 +140,15 @@ update_env_var "ASISTENBRO_TAG" "${TARGET_TAG}"
 update_env_var "OMNIGENT_IMAGE" "ghcr.io/leviantech/asistenbro-server"
 update_env_var "OMNIGENT_IMAGE_TAG" "${TARGET_TAG}"
 
-# Also replace hardcoded upstream anthropics image if present in docker-compose.yaml
-if [ -f "docker-compose.yaml" ] && grep -q "ghcr.io/anthropics/omnigent-server" "docker-compose.yaml"; then
-    log "Mengganti hardcoded image di docker-compose.yaml..."
-    sed "s|ghcr.io/anthropics/omnigent-server|ghcr.io/leviantech/asistenbro-server|g" docker-compose.yaml > docker-compose.yaml.tmp && mv docker-compose.yaml.tmp docker-compose.yaml
+# Replace previous server image references in compose file
+if [ -f "${COMPOSE_FILE}" ]; then
+    sed -i -E "s|image:[[:space:]]*([^[:space:]]*omnigent-server[^[:space:]]*)|image: ${NEW_IMAGE}|g" "${COMPOSE_FILE}"
 fi
 
 # Step 4: Pull image and restart container
 log "Menarik image Docker Asistenbro (${NEW_IMAGE})..."
-$DOCKER_COMPOSE pull omnigent
+docker pull "${NEW_IMAGE}"
+$DOCKER_COMPOSE pull omnigent 2>/dev/null || true
 
 log "Memulai proses in-place upgrade container..."
 $DOCKER_COMPOSE up -d --no-deps omnigent
