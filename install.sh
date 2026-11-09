@@ -112,9 +112,12 @@ if [ "$(uname -s)" = "Darwin" ]; then
         *)     MAC_ARCH="x64" ;;
     esac
 
-    ZIP_NAME="Asistenbro-0.18.1-${MAC_ARCH}-mac.zip"
+    ZIP_NAME="Asistenbro-${CLEAN_VER}-${MAC_ARCH}-mac.zip"
     log "Mengunduh Asistenbro Desktop App untuk macOS (${MAC_ARCH})..."
-    curl -fsSL -o "${TMP_DIR}/desktop.zip" "${BASE_URL}/${ZIP_NAME}"
+    if ! curl -fsSL -o "${TMP_DIR}/desktop.zip" "${BASE_URL}/${ZIP_NAME}" 2>/dev/null; then
+        warn "File ${ZIP_NAME} tidak ditemukan di rilis ${RELEASE_TAG}, mencoba fallback ke 0.18.1..."
+        curl -fsSL -o "${TMP_DIR}/desktop.zip" "${BASE_URL}/Asistenbro-0.18.1-${MAC_ARCH}-mac.zip"
+    fi
 
     APP_DIR="/Applications"
     if [ ! -w "${APP_DIR}" ]; then
