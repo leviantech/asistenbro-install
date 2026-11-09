@@ -1,5 +1,10 @@
 # Asistenbro Windows Installer
-# One-liner: irm https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.ps1 | iex
+# One-liner (CLI):     irm https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.ps1 | iex
+# One-liner (Desktop): & ([scriptblock]::Create((irm https://raw.githubusercontent.com/leviantech/asistenbro-install/main/install.ps1))) -Desktop
+
+param(
+    [switch]$Desktop
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -8,13 +13,31 @@ if (-not $env:ASISTENBRO_VERSION) {
         $Latest = Invoke-RestMethod -Uri "https://api.github.com/repos/leviantech/asistenbro-install/releases/latest"
         $ReleaseTag = $Latest.tag_name
     } catch {
-        $ReleaseTag = "v0.21.0"
+        $ReleaseTag = "v0.21.2"
     }
 } else {
     $ReleaseTag = $env:ASISTENBRO_VERSION
 }
 
 $CleanVer = $ReleaseTag.TrimStart("v")
+$BaseUrl = "https://github.com/leviantech/asistenbro-install/releases/download/$ReleaseTag"
+$DefaultServer = "https://agent.asistenbro.my.id"
+
+Write-Host "=========================================" -ForegroundColor Cyan
+Write-Host "         Asistenbro Installer" -ForegroundColor Green
+Write-Host "=========================================" -ForegroundColor Cyan
+
+if ($Desktop) {
+    Write-Host "==> Mengunduh Asistenbro Desktop Setup ($ReleaseTag)..." -ForegroundColor Green
+    $SetupExe = "Asistenbro-$CleanVer-setup.exe"
+    $DestPath = "$env:TEMP\$SetupExe"
+    Invoke-WebRequest -Uri "$BaseUrl/$SetupExe" -OutFile "$DestPath"
+    Write-Host "==> Menjalankan installer..." -ForegroundColor Green
+    Start-Process -FilePath "$DestPath"
+    Write-Host "Installer Desktop berhasil dibuka!" -ForegroundColor Green
+    exit 0
+}
+
 $PyVer = $CleanVer.Replace("-rc.", "rc")
 if ($ReleaseTag -eq "v0.20.1") {
     $PyVer = "0.20.0.dev0"
@@ -23,15 +46,8 @@ $WheelName = "omnigent-$PyVer-py3-none-any.whl"
 $ClientWheelName = "omnigent_client-$PyVer-py3-none-any.whl"
 $UiWheelName = "omnigent_ui_sdk-$PyVer-py3-none-any.whl"
 
-$BaseUrl = "https://github.com/leviantech/asistenbro-install/releases/download/$ReleaseTag"
-$DefaultServer = "https://agent.asistenbro.my.id"
-
 $InstallDir = "$env:USERPROFILE\.local\share\asistenbro\venv"
 $BinDir = "$env:USERPROFILE\.local\bin"
-
-Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host "         Asistenbro Installer" -ForegroundColor Green
-Write-Host "=========================================" -ForegroundColor Cyan
 
 # Step 1: Ensure uv is installed
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
